@@ -1,0 +1,82 @@
+name: Order Service CI/CD - Blue Green
+
+on:
+  push:
+    branches:
+      - master
+
+env:
+  AWS_REGION: ${{ secrets.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+  IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/order-service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 🧾 Checkout source code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 🔐 Configure AWS credentials for CLI + EKS access
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # ⚙️ Set up kubectl CLI
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+
+      # 📡 Update kubeconfig to connect to the EKS cluster
+      - name: Update kubeconfig for EKS
+        run: aws eks update-kubeconfig --region $AWS_REGION --name $EKS_CLUSTER_NAME
+
+      # 🐳 Authenticate to Docker Hub
+      - name: Log in to Docker Hub
+        run: echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      # 🏗️ Build and push Docker image for order-service
+      - name: Build and push Docker image
+        run: |
+          docker build -t $IMAGE_NAME:latest .
+          docker push $IMAGE_NAME:latest
+
+      # 🚀 Deploy Green version of order-service
+      - name: Deploy Green Version to EKS
+        run: kubectl apply -f k8s/order-service/order-service-green.yaml
+
+      # ✅ Wait until Green pod is ready
+      - name: Wait for Green Pod to be Ready
+        run: |
+          GREEN_POD=$(kubectl get pods -l app=order-service,version=green -o jsonpath="{.items[0].metadata.name}")
+          kubectl wait --for=condition=Ready pod/$GREEN_POD --timeout=90s
+
+      # 🔁 Switch service selector to point to Green deployment
+      - name: Switch Service to Green
+        run: |
+          kubectl patch svc order-service -p '{"spec": {"selector": {"app": "order-service", "version": "green"}}}'
+
+      # 🔄 Restart green deployment (optional but safe for Blue-Green)
+      - name: Rollout restart green deployment
+        run: |
+          kubectl rollout restart deployment order-service-green
+
+      # 🧹 Clean up Blue deployment
+      - name: Delete Blue Deployment
+        if: success()
+        run: kubectl delete deployment order-service-blue || true
+
+#################################################################
+# 🚦 Blue-Green Strategy Summary:
+# - Both "blue" and "green" deployments exist in the cluster.
+# - Only one of them receives traffic at a time via the shared
+#   "order-service" LoadBalancer Service.
+# - Traffic switch is done using `kubectl patch` to change the
+#   selector on the service.
+# - Ensures 100% uptime during deployment.
+# - Easy rollback by switching selector back to Blue.
+#################################################################

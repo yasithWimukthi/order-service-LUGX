@@ -1,0 +1,13 @@
+# k8s/order-service/order-service-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  selector:
+    app: order-service
+    version: blue  # Start by pointing to blue
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: LoadBalancer
