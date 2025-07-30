@@ -14,7 +14,7 @@ RUN npm run build
 
 # Generate Prisma client
 RUN npx prisma generate
-RUN npx prisma migrate deploy
+#RUN npx prisma migrate deploy
 
 # Start the app
 CMD ["node", "dist/index.js"]
