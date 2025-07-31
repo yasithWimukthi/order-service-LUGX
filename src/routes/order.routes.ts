@@ -9,7 +9,7 @@ router.get('/', getAllOrders);
 router.get('/:id', getOrderById);
 
 router.get('/hello/ping', (req, res) => {
-    res.send('Hello World - After Blue Green Deployment');
+    res.send('Hello World - After Blue Green Deployment - 1');
 });
 
 export default router;
