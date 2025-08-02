@@ -3,7 +3,7 @@ name: Order Service CI/CD - Blue Green
 on:
   push:
     branches:
-      - master  # or 'main' if applicable
+      - master
 
 env:
   AWS_REGION: ${{ secrets.AWS_REGION }}
@@ -61,6 +61,12 @@ jobs:
         run: |
           GREEN_POD=$(kubectl get pods -l app=order-service,version=green -o jsonpath="{.items[0].metadata.name}")
           kubectl exec $GREEN_POD -- npx prisma migrate deploy
+
+      - name: 🧪 Run Integration Tests Against Green
+        run: |
+          GREEN_IP=$(kubectl get svc order-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
+          echo "Testing against: http://$GREEN_IP/api/orders"
+          curl --fail http://$GREEN_IP/api/orders
 
       # 🔁 Step 10: Switch Service to Green
       - name: 🔁 Switch Service to Green (Blue-Green switch)
