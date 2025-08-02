@@ -65,8 +65,15 @@ jobs:
       - name: 🧪 Run Integration Tests Against Green
         run: |
           GREEN_IP=$(kubectl get svc order-service -o jsonpath="{.status.loadBalancer.ingress[0].hostname}")
-          echo "Testing against: http://$GREEN_IP/api/orders"
-          curl --fail http://$GREEN_IP/api/orders
+          
+          echo "Waiting for Load Balancer DNS to resolve..."
+          until nslookup $GREEN_IP; do echo "⏳ Waiting..."; sleep 5; done
+          
+          echo "Sleeping 20s for pods to warm up..."
+          sleep 20
+          
+          echo "Testing endpoint: http://$GREEN_IP:3000/api/orders"
+          curl --fail http://$GREEN_IP:3000/api/orders
 
       # 🔁 Step 10: Switch Service to Green
       - name: 🔁 Switch Service to Green (Blue-Green switch)
